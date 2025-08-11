@@ -1,0 +1,514 @@
+// components/pulse-background.tsx
+import { motion, useReducedMotion } from "framer-motion"
+
+export default function PulseBackground({ isLiteMode = false }: { isLiteMode?: boolean }) {
+  const shouldReduceMotion = useReducedMotion()
+  if (shouldReduceMotion || isLiteMode) {
+    return (
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-700 to-blue-500 rounded-full opacity-25 blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-blue-800 to-blue-600 rounded-full opacity-25 blur-3xl" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      <motion.div
+        className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-700 to-blue-500 rounded-full opacity-25 blur-3xl"
+        initial={{ scale: 1, opacity: 0.22 }}
+        animate={{ scale: 1.08, opacity: 0.3 }}
+        transition={{ repeat: Number.POSITIVE_INFINITY, repeatType: "mirror", duration: 4, ease: "easeInOut" }}
+        style={{ willChange: "transform, opacity" }}
+      />
+      <motion.div
+        className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-blue-800 to-blue-600 rounded-full opacity:25 blur-3xl"
+        initial={{ scale: 1.06, opacity: 0.28 }}
+        animate={{ scale: 1, opacity: 0.22 }}
+        transition={{ repeat: Number.POSITIVE_INFINITY, repeatType: "mirror", duration: 5, ease: "easeInOut" }}
+        style={{ willChange: "transform, opacity" }}
+      />
+      {/* soft radial shine layer */}
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0.04 }}
+        animate={{ opacity: 0.1 }}
+        transition={{ repeat: Number.POSITIVE_INFINITY, repeatType: "mirror", duration: 6 }}
+        style={{
+          background:
+            "radial-gradient(1200px 600px at 20% 10%, rgba(255,255,255,0.12), transparent 60%)",
+          willChange: "opacity",
+        }}
+      />
+    </div>
+  )
+}
+
+
+// components/cursor-trail.tsx
+"use client"
+
+import { useState, useEffect, useCallback } from "react"
+import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion"
+
+interface TrailPoint {
+  x: number
+  y: number
+  id: number
+}
+
+export default function CursorTrail({ isLiteMode = false }: { isLiteMode?: boolean }) {
+  const [trail, setTrail] = useState<TrailPoint[]>([])
+  const [mounted, setMounted] = useState(false)
+  const reduce = useReducedMotion()
+
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+  const sx = useSpring(x, { stiffness: 300, damping: 30 })
+  const sy = useSpring(y, { stiffness: 300, damping: 30 })
+
+  useEffect(() => setMounted(true), [])
+
+  const onMove = useCallback(
+    (e: MouseEvent) => {
+      if (reduce || isLiteMode) return
+      x.set(e.clientX)
+      y.set(e.clientY)
+      setTrail((p) => [{ x: e.clientX, y: e.clientY, id: Date.now() }, ...p.slice(0, 3)])
+    },
+    [x, y, reduce, isLiteMode]
+  )
+
+  useEffect(() => {
+    if (!mounted || reduce || isLiteMode) return
+    const handler = (e: MouseEvent) => onMove(e)
+    window.addEventListener("mousemove", handler)
+    let t: number
+    const clearSoon = () => {
+      clearTimeout(t)
+      t = window.setTimeout(() => setTrail([]), 200)
+    }
+    window.addEventListener("mousemove", clearSoon)
+    return () => {
+      window.removeEventListener("mousemove", handler)
+      window.removeEventListener("mousemove", clearSoon)
+      clearTimeout(t)
+    }
+  }, [mounted, onMove, reduce, isLiteMode])
+
+  if (!mounted || reduce || isLiteMode) return null
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50">
+      {/* main blue glow */}
+      <motion.div
+        className="absolute w-4 h-4 rounded-full"
+        style={{
+          x: sx,
+          y: sy,
+          transform: "translate(-50%, -50%)",
+          background:
+            "radial-gradient(circle, rgba(96,165,250,0.9) 0%, rgba(37,99,235,0.6) 40%, rgba(2,6,23,0) 70%)",
+          filter: "blur(1px)",
+          willChange: "transform, opacity",
+        }}
+        animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+      />
+      {/* quick-fading trail dots */}
+      {trail.map((p) => (
+        <motion.div
+          key={p.id}
+          className="absolute w-2 h-2 rounded-full"
+          style={{
+            left: p.x,
+            top: p.y,
+            transform: "translate(-50%, -50%)",
+            background:
+              "radial-gradient(circle, rgba(147,197,253,0.9) 0%, rgba(59,130,246,0.6) 50%, transparent 80%)",
+            willChange: "transform, opacity",
+          }}
+          initial={{ scale: 1, opacity: 0.8 }}
+          animate={{ scale: 0.3, opacity: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        />
+      ))}
+    </div>
+  )
+}
+
+
+// app/page.tsx
+"use client"
+
+import Image from "next/image"
+import { useState, useEffect } from "react"
+import { motion, useReducedMotion } from "framer-motion"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Wallet, Zap, Github, Twitter, Sun, Moon, ExternalLink, AlertCircle } from 'lucide-react'
+import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
+import CursorTrail from "@/components/cursor-trail"
+import PulseBackground from "@/components/pulse-background"
+import LiteModeToggle from "@/components/lite-mode-toggle"
+import { useLiteMode } from "@/components/lite-mode-provider"
+
+interface WalletState {
+  isConnected: boolean
+  address: string | null
+  chainId: number | null
+}
+
+export default function LandingPage() {
+  const [wallet, setWallet] = useState<WalletState>({ isConnected: false, address: null, chainId: null })
+  const [showNetworkWarning, setShowNetworkWarning] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+  const { isLiteMode } = useLiteMode()
+  const reduce = useReducedMotion()
+
+  const BASE_CHAIN_ID = 8453
+
+  useEffect(() => setMounted(true), [])
+
+  const connectWallet = async () => {
+    setTimeout(() => {
+      const mockChainId = Math.random() > 0.5 ? BASE_CHAIN_ID : 1
+      setWallet({ isConnected: true, address: "0x1234...5678", chainId: mockChainId })
+      if (mockChainId === BASE_CHAIN_ID) router.push("/dao")
+      else setShowNetworkWarning(true)
+    }, 800)
+  }
+
+  const switchToBase = () => {
+    setWallet((p) => ({ ...p, chainId: BASE_CHAIN_ID }))
+    setShowNetworkWarning(false)
+    router.push("/dao")
+  }
+
+  const features = [
+    { icon: Zap, title: "Launch a DAO in 60 Seconds", desc: "Set up instantly with a streamlined flow.", grad: "from-blue-600 to-blue-500" },
+    { icon: Zap, title: "Propose and Vote Freely", desc: "Zero gas voting experience.", grad: "from-blue-700 to-blue-600" },
+    { icon: Zap, title: "Live Onchain Results", desc: "See outcomes update in real-time.", grad: "from-blue-800 to-blue-700" },
+  ]
+
+  if (!mounted) return null
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 relative overflow-hidden">
+      <CursorTrail isLiteMode={isLiteMode} />
+      <PulseBackground isLiteMode={isLiteMode} />
+
+      {/* Header */}
+      <motion.header
+        initial={reduce || isLiteMode ? {} : { opacity: 0, y: -20 }}
+        animate={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="fixed top-0 w-full z-50 backdrop-blur-xl bg-white/5 dark:bg-black/10 border-b border-blue-400/10"
+      >
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Image src="/logo.png" alt="VoteSprout logo" width={32} height={32} className="rounded-xl shadow-lg" />
+            <span className="text-xl font-bold text-white">VoteSprout</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <LiteModeToggle />
+            <motion.div whileHover={reduce || isLiteMode ? {} : { scale: 1.05 }} whileTap={reduce || isLiteMode ? {} : { scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="rounded-full bg-white/5 hover:bg-white/10 border border-blue-300/20"
+              >
+                {theme === "dark" ? <Sun className="w-5 h-5 text-blue-300" /> : <Moon className="w-5 h-5 text-blue-500" />}
+              </Button>
+            </motion.div>
+          </div>
+        </div>
+      </motion.header>
+
+      {/* Network Warning Modal */}
+      {showNetworkWarning && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-md">
+          <motion.div
+            initial={reduce || isLiteMode ? {} : { opacity: 0, scale: 0.95 }}
+            animate={reduce || isLiteMode ? {} : { opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            className="bg-blue-900/50 border border-blue-300/20 rounded-2xl p-8 shadow-2xl max-w-md w-[90%] text-white"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-blue-600 rounded-full">
+                <AlertCircle className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold">Switch to Base Network</h3>
+            </div>
+            <p className="text-blue-100 mb-6">VoteSprout runs on Base. Please switch your wallet to Base to continue.</p>
+            <div className="flex gap-3">
+              <Button onClick={switchToBase} className="flex-1 bg-blue-600 hover:bg-blue-500 border border-blue-300/30">Switch to Base</Button>
+              <Button variant="outline" onClick={() => setShowNetworkWarning(false)} className="bg-white/5 border-blue-300/30 text-white hover:bg-white/10">Cancel</Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Hero */}
+      <section className="pt-32 pb-20 px-4 relative z-30">
+        <div className="container mx-auto max-w-6xl text-center space-y-10">
+          <motion.div initial={reduce || isLiteMode ? {} : { opacity: 0, y: 20 }} animate={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+            <Badge className="px-6 py-3 bg-white/10 border border-blue-300/20 text-blue-100">
+              <Zap className="w-4 h-4 mr-2 text-blue-300" />
+              Powered by Base Network
+            </Badge>
+          </motion.div>
+
+          <motion.h1
+            className="text-5xl md:text-7xl lg:text-8xl font-extrabold leading-tight"
+            initial={reduce || isLiteMode ? {} : { opacity: 0, y: 24 }}
+            animate={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <span className="bg-gradient-to-r from-blue-300 via-blue-400 to-blue-200 bg-clip-text text-transparent">Gasless DAO Voting</span>
+            <br />
+            <span className="bg-gradient-to-r from-blue-200 via-blue-300 to-blue-100 bg-clip-text text-transparent">for Everyone</span>
+          </motion.h1>
+
+          <motion.p
+            className="text-xl md:text-2xl text-blue-100 max-w-3xl mx-auto"
+            initial={reduce || isLiteMode ? {} : { opacity: 0, y: 14 }}
+            animate={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }}
+          >
+            Create and vote on proposals using your wallet — no ETH needed.
+          </motion.p>
+
+          <motion.div whileHover={reduce || isLiteMode ? {} : { scale: 1.05 }} whileTap={reduce || isLiteMode ? {} : { scale: 0.95 }} className="relative inline-block">
+            <Button
+              onClick={connectWallet}
+              disabled={wallet.isConnected}
+              size="lg"
+              className="relative px-10 py-7 text-lg font-bold rounded-2xl bg-gradient-to-br from-blue-600 to-blue-500 hover:from-blue-600 hover:to-blue-500 border border-blue-300/30 text-white shadow-[0_8px_24px_rgba(30,64,175,0.45)]"
+              style={{ willChange: "transform" }}
+            >
+              <Wallet className="w-6 h-6 mr-3" />
+              {wallet.isConnected ? "Wallet Connected" : "Connect Wallet"}
+
+              {/* shiny sweep */}
+              {!reduce && !isLiteMode && (
+                <motion.div
+                  className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/50 to-transparent rounded-2xl"
+                  initial={{ x: "-150%" }}
+                  animate={{ x: "150%" }}
+                  transition={{ duration: 2.2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                  style={{ willChange: "transform, opacity" }}
+                />
+              )}
+            </Button>
+          </motion.div>
+
+          {wallet.isConnected && (
+            <div className="text-sm text-blue-200 bg-white/5 backdrop-blur-sm rounded-full px-4 py-2 border border-blue-300/20 inline-block">
+              Connected: {wallet.address}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="py-20 px-4 relative z-30">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-800/30 via-blue-700/25 to-blue-800/30" />
+        <div className="container mx-auto max-w-6xl relative z-10">
+          <div className="grid md:grid-cols-3 gap-8">
+            {features.map((f, i) => (
+              <motion.div
+                key={i}
+                initial={reduce || isLiteMode ? {} : { opacity: 0, y: 24 }}
+                whileInView={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+              >
+                <Card className="h-full bg-white/10 border border-blue-300/20 rounded-2xl shadow-xl backdrop-blur-xl overflow-hidden group">
+                  <CardContent className="p-8 text-center space-y-6 relative">
+                    <div className={`w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br ${f.grad} flex items-center justify-center shadow-[0_12px_36px_rgba(30,64,175,0.45)]`}>
+                      <f.icon className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white">{f.title}</h3>
+                    <p className="text-blue-100">{f.desc}</p>
+
+                    {/* card sheen */}
+                    {!reduce && !isLiteMode && (
+                      <motion.div
+                        className="absolute -inset-0.5 opacity-0 group-hover:opacity-100 pointer-events-none"
+                        initial={{ x: "-120%" }}
+                        whileHover={{}}
+                        animate={{ x: ["-120%", "120%"] }}
+                        transition={{ duration: 2.4, repeat: Number.POSITIVE_INFINITY }}
+                        style={{
+                          background:
+                            "linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)",
+                          willChange: "transform, opacity",
+                        }}
+                      />
+                    )}
+                  </CardContent>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-16 px-4 relative z-30 border-t border-blue-300/10">
+          <div className="container mx-auto max-w-6xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="VoteSprout logo" width={36} height={36} className="rounded-xl shadow-lg" />
+              <span className="text-2xl font-semibold text-white">VoteSprout</span>
+            </div>
+            <div className="flex items-center gap-4">
+              {[{ icon: Github, href: "https://github.com" }, { icon: Twitter, href: "https://twitter.com" }, { icon: ExternalLink, href: "https://base.org" }].map((s, idx) => (
+                <motion.a
+                  key={idx}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  whileHover={reduce || isLiteMode ? {} : { scale: 1.12 }}
+                  className="p-3 rounded-xl bg-white/10 border border-blue-300/20 text-white shadow-md hover:shadow-blue-800/40"
+                >
+                  <s.icon className="w-5 h-5" />
+                </motion.a>
+              ))}
+            </div>
+          </div>
+        </footer>
+      </div>
+    )
+  }
+
+
+// app/dao/page.tsx
+"use client"
+
+import Image from "next/image"
+import { motion, useReducedMotion } from "framer-motion"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, Plus, Users, TrendingUp } from 'lucide-react'
+import Link from "next/link"
+import CursorTrail from "@/components/cursor-trail"
+import PulseBackground from "@/components/pulse-background"
+import { useLiteMode } from "@/components/lite-mode-provider"
+
+export default function DAOPage() {
+  const { isLiteMode } = useLiteMode()
+  const reduce = useReducedMotion()
+
+  const mockDAOs = [
+    { id: 1, name: "DeFi Protocol DAO", members: 1234, activeProposals: 3, status: "Active", description: "Governing the future of decentralized finance" },
+    { id: 2, name: "NFT Community DAO", members: 567, activeProposals: 1, status: "Active", description: "Building the next generation of digital art" },
+    { id: 3, name: "Gaming Guild DAO", members: 890, activeProposals: 5, status: "Active", description: "Revolutionizing play-to-earn gaming" },
+  ]
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 relative overflow-hidden">
+      <CursorTrail isLiteMode={isLiteMode} />
+      <PulseBackground isLiteMode={isLiteMode} />
+
+      <div className="container mx-auto px-4 py-8 relative z-30">
+        <motion.div initial={reduce || isLiteMode ? {} : { opacity: 0, y: 24 }} animate={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <div className="flex items-center justify-between mb-12">
+            <div className="flex items-center gap-4">
+              <Link href="/">
+                <motion.div whileHover={reduce || isLiteMode ? {} : { scale: 1.06 }} whileTap={reduce || isLiteMode ? {} : { scale: 0.95 }}>
+                  <Button variant="ghost" size="icon" className="rounded-xl bg-white/10 hover:bg-white/15 border border-blue-300/20 text-white">
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                </motion.div>
+              </Link>
+              <div>
+                <h1 className="text-4xl font-bold text-white">Your DAOs</h1>
+                <p className="text-blue-100">Manage your decentralized organizations</p>
+              </div>
+            </div>
+
+            <motion.div whileHover={reduce || isLiteMode ? {} : { scale: 1.05 }}>
+              <Button className="bg-blue-600 hover:bg-blue-500 text-white border border-blue-300/30 rounded-xl shadow-[0_8px_24px_rgba(30,64,175,0.45)]">
+                <Plus className="w-5 h-5 mr-2" />
+                Create DAO
+              </Button>
+            </motion.div>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {mockDAOs.map((dao, idx) => (
+              <motion.div
+                key={dao.id}
+                initial={reduce || isLiteMode ? {} : { opacity: 0, y: 24 }}
+                whileInView={reduce || isLiteMode ? {} : { opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: idx * 0.1 }}
+              >
+                <Card className="h-full bg-white/10 border border-blue-300/20 rounded-2xl shadow-xl backdrop-blur-xl overflow-hidden group">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-white">{dao.name}</CardTitle>
+                      <Badge className="bg-blue-600 text-white border-0">Active</Badge>
+                    </div>
+                    <p className="text-sm text-blue-100">{dao.description}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1 bg-blue-600 rounded-lg">
+                          <Users className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="text-blue-100 font-medium">{dao.members} members</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="p-1 bg-blue-600 rounded-lg">
+                          <TrendingUp className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="text-blue-100 font-medium">{dao.activeProposals} active</span>
+                      </div>
+                    </div>
+
+                    <motion.div whileHover={reduce || isLiteMode ? {} : { scale: 1.02 }} whileTap={reduce || isLiteMode ? {} : { scale: 0.98 }}>
+                      <Button className="w-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-300/30 text-white rounded-xl">
+                        View DAO
+                      </Button>
+                    </motion.div>
+                  </CardContent>
+
+                  {/* card sheen */}
+                  {!reduce && !isLiteMode && (
+                    <motion.div
+                      className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100"
+                      initial={{ x: "-120%" }}
+                      animate={{ x: ["-120%", "120%"] }}
+                      transition={{ duration: 2.2, repeat: Number.POSITIVE_INFINITY }}
+                      style={{
+                        background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)",
+                        willChange: "transform, opacity",
+                      }}
+                    />
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+
+        <footer className="py-12 border-t border-blue-300/10">
+          <div className="container mx-auto max-w-6xl flex items-center justify-between px-4">
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="VoteSprout logo" width={32} height={32} className="rounded-xl shadow-lg" />
+              <span className="text-white text-lg font-semibold">VoteSprout</span>
+            </div>
+            <span className="text-blue-200">&copy; 2025 VoteSprout</span>
+          </div>
+        </footer>
+      </div>
+    )
+  }
