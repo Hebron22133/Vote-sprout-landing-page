@@ -1,64 +1,106 @@
 "use client"
 
+import { ConnectButton } from "@rainbow-me/rainbowkit"
 import { Button } from "@/components/ui/button"
-import { useAccount, useChainId, useSwitchChain } from "wagmi"
-import { useConnectModal } from "@rainbow-me/rainbowkit"
-import { Wallet } from 'lucide-react'
-import { motion, useReducedMotion } from "framer-motion"
-import { useRouter } from "next/navigation"
-import { base } from "viem/chains"
-import { useEffect, useState } from "react"
+import { motion } from "framer-motion"
+import { useLiteMode } from "@/components/lite-mode-provider"
 
-export default function HeroConnectButton() {
-  const { isConnected } = useAccount()
-  const chainId = useChainId()
-  const { openConnectModal } = useConnectModal()
-  const { switchChain } = useSwitchChain()
-  const reduce = useReducedMotion()
-  const router = useRouter()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => setMounted(true), [])
-  useEffect(() => {
-    if (!mounted || !isConnected) return
-    if (chainId === base.id) router.push("/dao")
-  }, [mounted, isConnected, chainId, router])
-
-  if (!mounted) return null
-
-  const handleClick = async () => {
-    if (!isConnected) {
-      openConnectModal?.()
-      return
-    }
-    if (chainId !== base.id) {
-      switchChain({ chainId: base.id })
-      return
-    }
-    router.push("/dao")
-  }
+export function HeroConnect() {
+  const { isLiteMode } = useLiteMode()
 
   return (
-    <motion.div whileHover={reduce ? {} : { scale: 1.05 }} whileTap={reduce ? {} : { scale: 0.95 }} className="relative inline-block">
-      <Button
-        onClick={handleClick}
-        size="lg"
-        className="relative px-10 py-7 text-lg font-bold rounded-2xl bg-gradient-to-br from-blue-600 to-blue-500 hover:from-blue-600 hover:to-blue-500 border border-blue-300/30 text-white shadow-[0_8px_24px_rgba(30,64,175,0.45)]"
-        style={{ willChange: "transform" }}
-      >
-        <Wallet className="w-6 h-6 mr-3" />
-        {isConnected ? (chainId === base.id ? "Go to Dashboard" : "Switch to Base") : "Connect Wallet"}
+    <ConnectButton.Custom>
+      {({ account, chain, openAccountModal, openChainModal, openConnectModal, authenticationStatus, mounted }) => {
+        const ready = mounted && authenticationStatus !== "loading"
+        const connected =
+          ready && account && chain && (!authenticationStatus || authenticationStatus === "authenticated")
 
-        {!reduce && (
-          <motion.div
-            className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/50 to-transparent rounded-2xl"
-            initial={{ x: "-150%" }}
-            animate={{ x: "150%" }}
-            transition={{ duration: 2.2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-            style={{ willChange: "transform, opacity" }}
-          />
-        )}
-      </Button>
-    </motion.div>
+        return (
+          <div
+            {...(!ready && {
+              "aria-hidden": true,
+              style: {
+                opacity: 0,
+                pointerEvents: "none",
+                userSelect: "none",
+              },
+            })}
+          >
+            {(() => {
+              if (!connected) {
+                return (
+                  <motion.div
+                    whileHover={!isLiteMode ? { scale: 1.05 } : {}}
+                    whileTap={!isLiteMode ? { scale: 0.95 } : {}}
+                    className="relative"
+                  >
+                    <Button
+                      onClick={openConnectModal}
+                      size="lg"
+                      className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold px-8 py-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                    >
+                      <span className="relative z-10">Connect Wallet</span>
+                      {!isLiteMode && (
+                        <motion.div
+                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                          initial={{ x: "-100%" }}
+                          animate={{ x: "100%" }}
+                          transition={{
+                            repeat: Number.POSITIVE_INFINITY,
+                            duration: 2,
+                            ease: "linear",
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </motion.div>
+                )
+              }
+
+              if (chain.unsupported) {
+                return (
+                  <Button onClick={openChainModal} variant="destructive">
+                    Wrong network
+                  </Button>
+                )
+              }
+
+              return (
+                <div className="flex gap-3">
+                  <Button onClick={openChainModal} variant="outline" className="flex items-center gap-2 bg-transparent">
+                    {chain.hasIcon && (
+                      <div
+                        style={{
+                          background: chain.iconBackground,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 999,
+                          overflow: "hidden",
+                          marginRight: 4,
+                        }}
+                      >
+                        {chain.iconUrl && (
+                          <img
+                            alt={chain.name ?? "Chain icon"}
+                            src={chain.iconUrl || "/placeholder.svg"}
+                            style={{ width: 12, height: 12 }}
+                          />
+                        )}
+                      </div>
+                    )}
+                    {chain.name}
+                  </Button>
+
+                  <Button onClick={openAccountModal} variant="outline">
+                    {account.displayName}
+                    {account.displayBalance ? ` (${account.displayBalance})` : ""}
+                  </Button>
+                </div>
+              )
+            })()}
+          </div>
+        )
+      }}
+    </ConnectButton.Custom>
   )
 }

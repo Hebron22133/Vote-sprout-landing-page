@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion"
+import { useEffect, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { useLiteMode } from "@/components/lite-mode-provider"
 
 interface TrailPoint {
   x: number
@@ -9,82 +10,81 @@ interface TrailPoint {
   id: number
 }
 
-export default function CursorTrail({ isLiteMode = false }: { isLiteMode?: boolean }) {
+export function CursorTrail() {
+  const { isLiteMode } = useLiteMode()
   const [trail, setTrail] = useState<TrailPoint[]>([])
-  const [mounted, setMounted] = useState(false)
-  const reduce = useReducedMotion()
-
-  const x = useMotionValue(0)
-  const y = useMotionValue(0)
-  const sx = useSpring(x, { stiffness: 300, damping: 30 })
-  const sy = useSpring(y, { stiffness: 300, damping: 30 })
-
-  useEffect(() => setMounted(true), [])
-
-  const onMove = useCallback(
-    (e: MouseEvent) => {
-      if (reduce || isLiteMode) return
-      x.set(e.clientX)
-      y.set(e.clientY)
-      setTrail((p) => [{ x: e.clientX, y: e.clientY, id: Date.now() }, ...p.slice(0, 3)])
-    },
-    [x, y, reduce, isLiteMode]
-  )
+  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
-    if (!mounted || reduce || isLiteMode) return
-    const handler = (e: MouseEvent) => onMove(e)
-    window.addEventListener("mousemove", handler)
-    let t: number
-    const clearSoon = () => {
-      clearTimeout(t)
-      t = window.setTimeout(() => setTrail([]), 200)
+    // Check if device is mobile
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || "ontouchstart" in window)
     }
-    window.addEventListener("mousemove", clearSoon)
-    return () => {
-      window.removeEventListener("mousemove", handler)
-      window.removeEventListener("mousemove", clearSoon)
-      clearTimeout(t)
-    }
-  }, [mounted, onMove, reduce, isLiteMode])
 
-  if (!mounted || reduce || isLiteMode) return null
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
+
+  useEffect(() => {
+    if (isLiteMode || isMobile) return
+
+    let animationId: number
+    let lastTime = 0
+    const throttleMs = 16 // ~60fps
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const now = Date.now()
+      if (now - lastTime < throttleMs) return
+      lastTime = now
+
+      const newPoint: TrailPoint = {
+        x: e.clientX,
+        y: e.clientY,
+        id: now,
+      }
+
+      setTrail((prev) => [...prev.slice(-20), newPoint])
+    }
+
+    const fadeTrail = () => {
+      setTrail((prev) => prev.filter((point) => Date.now() - point.id < 1000))
+      animationId = requestAnimationFrame(fadeTrail)
+    }
+
+    document.addEventListener("mousemove", handleMouseMove)
+    animationId = requestAnimationFrame(fadeTrail)
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      cancelAnimationFrame(animationId)
+    }
+  }, [isLiteMode, isMobile])
+
+  if (isLiteMode || isMobile) return null
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50">
-      {/* main dark glow */}
-      <motion.div
-        className="absolute w-4 h-4 rounded-full"
-        style={{
-          x: sx,
-          y: sy,
-          transform: "translate(-50%, -50%)",
-          background:
-            "radial-gradient(circle, rgba(244,244,245,0.65) 0%, rgba(168,85,247,0.45) 40%, rgba(2,6,23,0) 70%)",
-          filter: "blur(1px)",
-          willChange: "transform, opacity",
-        }}
-        animate={{ scale: [1, 1.15, 1], opacity: [0.6, 0.9, 0.6] }}
-        transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-      />
-      {/* quick-fading trail dots */}
-      {trail.map((p) => (
-        <motion.div
-          key={p.id}
-          className="absolute w-2 h-2 rounded-full"
-          style={{
-            left: p.x,
-            top: p.y,
-            transform: "translate(-50%, -50%)",
-            background:
-              "radial-gradient(circle, rgba(212,212,216,0.8) 0%, rgba(147,51,234,0.5) 50%, transparent 80%)",
-            willChange: "transform, opacity",
-          }}
-          initial={{ scale: 1, opacity: 0.8 }}
-          animate={{ scale: 0.3, opacity: 0 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-        />
-      ))}
+      <AnimatePresence>
+        {trail.map((point, index) => (
+          <motion.div
+            key={point.id}
+            className="absolute w-2 h-2 rounded-full bg-gradient-to-r from-blue-400 to-purple-400"
+            style={{
+              left: point.x - 4,
+              top: point.y - 4,
+            }}
+            initial={{ scale: 0, opacity: 1 }}
+            animate={{
+              scale: 1 - index * 0.05,
+              opacity: 1 - index * 0.05,
+            }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+        ))}
+      </AnimatePresence>
     </div>
   )
 }
